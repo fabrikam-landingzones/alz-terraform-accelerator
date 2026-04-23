@@ -1,40 +1,48 @@
-# Azure Landing Zones Terraform Accelerator
+# Azure Landing Zones Accelerator Starter Module for Terraform - Azure Verified Modules Complete Multi-Region
 
-[![End to End Tests](https://github.com/Azure/alz-terraform-accelerator/actions/workflows/end-to-end-test.yml/badge.svg)](https://github.com/Azure/alz-terraform-accelerator/actions/workflows/end-to-end-test.yml)
-[![license](https://img.shields.io/badge/License-MIT-purple.svg)](LICENSE)
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/Azure/alz-terraform-accelerator/badge)](https://scorecard.dev/viewer/?uri=github.com/Azure/alz-terraform-accelerator)
-![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/Azure/alz-terraform-accelerator?style=flat&logo=github)
-![GitHub closed pull requests](https://img.shields.io/github/issues-pr-closed/Azure/alz-terraform-accelerator)
-![GitHub contributors](https://img.shields.io/github/contributors/Azure/alz-terraform-accelerator)
+This module is part of the Azure Landing Zones Accelerator solution. It is a complete multi-region implementation of the Azure Landing Zones Platform Landing Zone for Terraform.
 
-## Introduction
+It deploys a hub and spoke virtual network or Virtual WAN architecture across multiple regions.
 
-This repository provides the starter modules for the Azure Landing Zones IaC Terraform Accelerator.
+The module deploys the following resources:
 
-Please head over to [aka.ms/alz/acc](https://aka.ms/alz/acc) for detailed features and usage instructions.
+- Management group hierarchy
+- Azure Policy definitions and assignments
+- Role definitions
+- Management resources, including Log Analytics workspace and Automation account
+- Hub and spoke virtual network or Virtual WAN architecture across multiple regions
+- DDOS protection plan
+- Private DNS zones
 
-## Issues
+## Usage
 
-Please raise an issue over here: [https://aka.ms/alz/acc/issues](https://aka.ms/alz/acc/issues)
+The module is intended to be used with the [Azure Landing Zones Accelerator](https://aka.ms/alz/acc). Head over there to get started.
 
-## Contributing
+>NOTE: The module can be used independently if needed. Example `tfvars` files can be found in the `examples` directory for that use case.
 
-This project welcomes contributions and suggestions.  Most contributions require you to agree to a
-Contributor License Agreement (CLA) declaring that you have the right to, and actually do, grant us
-the rights to use your contribution. For details, visit [https://cla.opensource.microsoft.com](https://cla.opensource.microsoft.com).
+### Running Directly
 
-When you submit a pull request, a CLA bot will automatically determine whether you need to provide
-a CLA and decorate the PR appropriately (e.g., status check, comment). Simply follow the instructions
-provided by the bot. You will only need to do this once across all repos using our CLA.
+#### Run the local examples
 
-This project has adopted the [Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct/).
-For more information see the [Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/) or
-contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additional questions or comments.
+Create a `terraform.tfvars` file in the root of the module directory with the following content, replacing the placeholders with the actual values:
 
-## Trademarks
+```hcl
+starter_locations            = ["uksouth", "ukwest"]
+subscription_id_connectivity = "00000000-0000-0000-0000-000000000000"
+subscription_id_identity     = "00000000-0000-0000-0000-000000000000"
+subscription_id_management   = "00000000-0000-0000-0000-000000000000"
+```
 
-This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft
-trademarks or logos is subject to and must follow
-[Microsoft's Trademark & Brand Guidelines](https://www.microsoft.com/legal/intellectualproperty/trademarks/usage/general).
-Use of Microsoft trademarks or logos in modified versions of this project must not cause confusion or imply Microsoft sponsorship.
-Any use of third-party trademarks or logos are subject to those third-party's policies.
+##### Hub and Spoke Virtual Networks Multi Region
+
+```powershell
+terraform init
+terraform apply -var-file ./examples/full-multi-region/hub-and-spoke-vnet.tfvars
+```
+
+##### Virtual WAN Multi Region
+
+```powershell
+terraform init
+terraform apply -var-file ./examples/full-multi-region/virtual-wan.tfvars
+```
