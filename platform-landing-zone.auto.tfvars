@@ -159,7 +159,7 @@ management_resource_settings = {
       name    = "$${dcr_defender_sql_name}"
     }
     vm_insights = {
-      enabled = false
+      enabled = true
       name    = "$${dcr_vm_insights_name}"
     }
   }
