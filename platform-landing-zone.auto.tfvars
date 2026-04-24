@@ -375,6 +375,7 @@ hub_virtual_networks = {
       }
       auto_registration_zone_enabled = "$${primary_private_dns_auto_registration_zone_enabled}"
       auto_registration_zone_name    = "$${primary_auto_registration_zone_name}"
+      virtual_network_link_name_template = "vnet-link-$${primary_virtual_network_name}"
     }
     private_dns_resolver = {
       subnet_address_prefix = "$${primary_private_dns_resolver_subnet_address_prefix}"
