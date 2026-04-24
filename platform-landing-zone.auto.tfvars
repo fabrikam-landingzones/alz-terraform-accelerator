@@ -149,7 +149,20 @@ management_resource_settings = {
       name = "$${ama_user_assigned_managed_identity_name}"
     }
   }
-  data_collection_rules = {}
+  data_collection_rules = {
+    change_tracking = {
+      enabled = false
+      name    = "$${dcr_change_tracking_name}"
+    }
+    defender_sql = {
+      enabled = false
+      name    = "$${dcr_defender_sql_name}"
+    }
+    vm_insights = {
+      enabled = false
+      name    = "$${dcr_vm_insights_name}"
+    }
+  }
 }
 
 /*
