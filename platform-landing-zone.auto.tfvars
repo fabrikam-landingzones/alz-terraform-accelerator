@@ -44,7 +44,7 @@ custom_replacements = {
     primary_firewall_management_ip_enabled                               = false
     primary_virtual_network_gateway_express_route_enabled                = false
     primary_virtual_network_gateway_express_route_hobo_public_ip_enabled = false
-    primary_virtual_network_gateway_vpn_enabled                          = false
+    primary_virtual_network_gateway_vpn_enabled                          = true
     primary_private_dns_zones_enabled                                    = true
     primary_private_dns_auto_registration_zone_enabled                   = true
     primary_private_dns_resolver_enabled                                 = true
@@ -352,17 +352,17 @@ hub_virtual_networks = {
       }
       vpn = {
         name = "$${primary_virtual_network_gateway_vpn_name}"
+        sku  = "VpnGw1AZ"
+        vpn_active_active_enabled            = false
+        vpn_bgp_enabled                      = false
+        vpn_generation                       = "Generation1"
+        vpn_private_ip_address_enabled       = false
+        vpn_type                             = "RouteBased"
         ip_configurations = {
           active_active_1 = {
             # name = "vnetGatewayConfigactive_active_1"  # For backwards compatibility with previous naming, uncomment this line
             public_ip = {
               name = "$${primary_virtual_network_gateway_vpn_public_ip_name_1}"
-            }
-          }
-          active_active_2 = {
-            # name = "vnetGatewayConfigactive_active_2"  # For backwards compatibility with previous naming, uncomment this line
-            public_ip = {
-              name = "$${primary_virtual_network_gateway_vpn_public_ip_name_2}"
             }
           }
         }
