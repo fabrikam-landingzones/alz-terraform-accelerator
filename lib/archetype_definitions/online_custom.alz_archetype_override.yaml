@@ -1,7 +1,9 @@
 base_archetype: online
 name: online_custom
 policy_assignments_to_add: []
-policy_assignments_to_remove: []
+policy_assignments_to_remove: [
+  Deploy-Private-DNS-Zones,
+]
 policy_definitions_to_add: []
 policy_definitions_to_remove: []
 policy_set_definitions_to_add: []
