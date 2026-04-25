@@ -139,6 +139,8 @@ Current validated tag:
 
 ```text
 alz-vpn-connected-working
+alz-scenario6-platform-working
+alz-scenario6-subscriptions-placed
 ```
 
 ## 5. Why A Separate Deployment Directory Exists
@@ -390,12 +392,14 @@ alz-baseline-working
 alz-private-dns-working
 alz-private-dns-resolver-working
 alz-vpn-connected-working
+alz-scenario6-platform-working
+alz-scenario6-subscriptions-placed
 ```
 
 Current validated tag:
 
 ```text
-alz-vpn-connected-working -> c75d6ad
+alz-scenario6-subscriptions-placed -> 71940df
 ```
 
 ## 9. Important Stabilization Changes Made
@@ -1634,7 +1638,101 @@ Recommended rule:
 After GitHub Actions is active, do not run local terraform apply unless troubleshooting requires it and no pipeline is running.
 ```
 
-## 31. AI Landing Zone Preparation Workflow
+## 31. Subscription Placement in ALZ Management Groups
+
+Scenario 6 is not complete until subscriptions are placed under the intended ALZ management groups. In this implementation, the platform subscriptions were already placed, but the workload subscriptions still had to be moved from the previous `contosoinc` hierarchy into the new ALZ hierarchy.
+
+The following subscriptions were added to `management_group_settings.subscription_placement` in `platform-landing-zone.auto.tfvars`:
+
+| Subscription | Subscription ID | Target management group |
+| --- | --- | --- |
+| AI | `e4092919-7fd6-46bb-94fe-955fd8cc7ca1` | `ai` |
+| CORP | `f119d7a1-1278-4480-bd2c-2f6ff77ff01f` | `corp` |
+| HPC | `9adc397a-4c08-447e-8a97-15faef9e9f86` | `hpc` |
+| Migrate | `c202d22b-0236-481b-9c69-0ad5b2d54451` | `migrate` |
+| Online | `475ee8b6-bb28-4115-b780-a27db1aaf6fe` | `online` |
+| Sandbox | `28c3c8ba-cc60-49a8-af56-aeaeeab33546` | `sandbox` |
+
+Commit:
+
+```text
+71940df Place workload subscriptions in ALZ hierarchy
+```
+
+The first GitHub Actions apply failed because moving a subscription requires permission on both the subscription and the current/source management group hierarchy. The apply identity was:
+
+```text
+Application client ID: f3ef7b38-0ac4-477c-be2f-b1e339be72b6
+Service principal object ID: ccf2c5f7-2646-46be-897a-771dd053c82c
+Display name: id-fabalz-fabmgmt-eastus2-apply-001
+```
+
+The apply identity needed `User Access Administrator` on each subscription being moved:
+
+```powershell
+$principalId = "ccf2c5f7-2646-46be-897a-771dd053c82c"
+$subs = @(
+  "e4092919-7fd6-46bb-94fe-955fd8cc7ca1",
+  "f119d7a1-1278-4480-bd2c-2f6ff77ff01f",
+  "9adc397a-4c08-447e-8a97-15faef9e9f86",
+  "c202d22b-0236-481b-9c69-0ad5b2d54451",
+  "475ee8b6-bb28-4115-b780-a27db1aaf6fe",
+  "28c3c8ba-cc60-49a8-af56-aeaeeab33546"
+)
+
+foreach ($sub in $subs) {
+  az role assignment create `
+    --assignee-object-id $principalId `
+    --assignee-principal-type ServicePrincipal `
+    --role "User Access Administrator" `
+    --scope "/subscriptions/$sub"
+}
+```
+
+The apply identity also needed management group write permission on the previous/source hierarchy:
+
+```powershell
+az role assignment create `
+  --assignee-object-id ccf2c5f7-2646-46be-897a-771dd053c82c `
+  --assignee-principal-type ServicePrincipal `
+  --role "Management Group Contributor" `
+  --scope "/providers/Microsoft.Management/managementGroups/contosoinc"
+```
+
+After these RBAC assignments, GitHub Actions run `24943318211` completed successfully.
+
+Validate placement:
+
+```powershell
+az account management-group subscription show --name ai --subscription e4092919-7fd6-46bb-94fe-955fd8cc7ca1
+az account management-group subscription show --name corp --subscription f119d7a1-1278-4480-bd2c-2f6ff77ff01f
+az account management-group subscription show --name hpc --subscription 9adc397a-4c08-447e-8a97-15faef9e9f86
+az account management-group subscription show --name migrate --subscription c202d22b-0236-481b-9c69-0ad5b2d54451
+az account management-group subscription show --name online --subscription 475ee8b6-bb28-4115-b780-a27db1aaf6fe
+az account management-group subscription show --name sandbox --subscription 28c3c8ba-cc60-49a8-af56-aeaeeab33546
+```
+
+Final Terraform validation:
+
+```powershell
+$env:TF_VAR_vpn_shared_key = "ReplaceWithAStrongSharedKey123!"
+terraform plan -input=false -refresh=false
+```
+
+Expected result:
+
+```text
+No changes. Your infrastructure matches the configuration.
+```
+
+Checkpoint tag:
+
+```powershell
+git tag alz-scenario6-subscriptions-placed
+git push origin alz-scenario6-subscriptions-placed
+```
+
+## 32. AI Landing Zone Preparation Workflow
 
 The next implementation will use:
 
