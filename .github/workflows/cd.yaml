@@ -64,6 +64,7 @@ jobs:
           -chdir="." \
           plan \
           -out=tfplan \
+          -refresh=false \
           -input=false \
           ${{ inputs.terraform_action == 'destroy' && '-destroy' || '' }}
 
