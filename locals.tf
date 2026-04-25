@@ -19,10 +19,45 @@ locals {
   resource_groups = {
     resource_groups = module.resource_groups
   }
+  vpn_shared_key                  = nonsensitive(var.vpn_shared_key)
   hub_and_spoke_networks_settings = merge(module.config.outputs.hub_and_spoke_networks_settings, local.resource_groups)
-  hub_virtual_networks            = (merge({ vnets = module.config.outputs.hub_virtual_networks }, local.resource_groups)).vnets
-  virtual_wan_settings            = merge(module.config.outputs.virtual_wan_settings, local.resource_groups)
-  virtual_hubs                    = (merge({ vhubs = module.config.outputs.virtual_hubs }, local.resource_groups)).vhubs
+  hub_virtual_networks_base       = (merge({ vnets = module.config.outputs.hub_virtual_networks }, local.resource_groups)).vnets
+  hub_virtual_networks = local.vpn_shared_key == null ? local.hub_virtual_networks_base : merge(local.hub_virtual_networks_base, {
+    primary = merge(local.hub_virtual_networks_base.primary, {
+      virtual_network_gateways = merge(local.hub_virtual_networks_base.primary.virtual_network_gateways, {
+        vpn = merge(local.hub_virtual_networks_base.primary.virtual_network_gateways.vpn, {
+          local_network_gateways = merge(try(local.hub_virtual_networks_base.primary.virtual_network_gateways.vpn.local_network_gateways, {}), {
+            home_udr7 = {
+              name            = "lng-alz-home-udr7"
+              address_space   = ["192.168.4.0/24", "192.168.1.0/24"]
+              gateway_address = "67.8.189.45"
+              connection = {
+                name                               = "conn-alz-home-udr7"
+                type                               = "IPsec"
+                connection_protocol                = "IKEv2"
+                enable_bgp                         = false
+                routing_weight                     = 10
+                shared_key                         = local.vpn_shared_key
+                use_policy_based_traffic_selectors = false
+                ipsec_policy = {
+                  dh_group         = "DHGroup14"
+                  ike_encryption   = "AES256"
+                  ike_integrity    = "SHA256"
+                  ipsec_encryption = "AES256"
+                  ipsec_integrity  = "SHA256"
+                  pfs_group        = "None"
+                  sa_lifetime      = 3600
+                  sa_datasize      = 102400000
+                }
+              }
+            }
+          })
+        })
+      })
+    })
+  })
+  virtual_wan_settings = merge(module.config.outputs.virtual_wan_settings, local.resource_groups)
+  virtual_hubs         = (merge({ vhubs = module.config.outputs.virtual_hubs }, local.resource_groups)).vhubs
 }
 
 locals {

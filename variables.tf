@@ -106,3 +106,14 @@ telemetry_additional_content = {
 }
 DESCRIPTION
 }
+
+variable "vpn_shared_key" {
+  type        = string
+  default     = null
+  sensitive   = true
+  description = "Pre-shared key for the home UDR7 site-to-site VPN connection. Supply with TF_VAR_vpn_shared_key."
+  validation {
+    condition     = var.vpn_shared_key == null || length(trimspace(var.vpn_shared_key)) >= 16
+    error_message = "vpn_shared_key must be unset or at least 16 characters. Set the GitHub Actions secret VPN_SHARED_KEY before deploying the S2S VPN connection."
+  }
+}
