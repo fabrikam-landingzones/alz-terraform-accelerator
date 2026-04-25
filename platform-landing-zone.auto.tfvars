@@ -151,7 +151,7 @@ management_resource_settings = {
   }
   data_collection_rules = {
     change_tracking = {
-      enabled = false
+      enabled = true
       name    = "$${dcr_change_tracking_name}"
     }
     defender_sql = {
