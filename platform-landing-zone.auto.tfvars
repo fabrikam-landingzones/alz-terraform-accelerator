@@ -217,6 +217,30 @@ management_group_settings = {
       subscription_id       = "$${subscription_id_security}"
       management_group_name = "security"
     }
+    ai = {
+      subscription_id       = "e4092919-7fd6-46bb-94fe-955fd8cc7ca1"
+      management_group_name = "ai"
+    }
+    corp = {
+      subscription_id       = "f119d7a1-1278-4480-bd2c-2f6ff77ff01f"
+      management_group_name = "corp"
+    }
+    hpc = {
+      subscription_id       = "9adc397a-4c08-447e-8a97-15faef9e9f86"
+      management_group_name = "hpc"
+    }
+    migrate = {
+      subscription_id       = "c202d22b-0236-481b-9c69-0ad5b2d54451"
+      management_group_name = "migrate"
+    }
+    online = {
+      subscription_id       = "475ee8b6-bb28-4115-b780-a27db1aaf6fe"
+      management_group_name = "online"
+    }
+    sandbox = {
+      subscription_id       = "28c3c8ba-cc60-49a8-af56-aeaeeab33546"
+      management_group_name = "sandbox"
+    }
   }
   policy_assignments_to_modify = {
     alz = {
@@ -351,13 +375,13 @@ hub_virtual_networks = {
         }
       }
       vpn = {
-        name = "$${primary_virtual_network_gateway_vpn_name}"
-        sku  = "VpnGw1AZ"
-        vpn_active_active_enabled            = false
-        vpn_bgp_enabled                      = false
-        vpn_generation                       = "Generation1"
-        vpn_private_ip_address_enabled       = false
-        vpn_type                             = "RouteBased"
+        name                           = "$${primary_virtual_network_gateway_vpn_name}"
+        sku                            = "VpnGw1AZ"
+        vpn_active_active_enabled      = false
+        vpn_bgp_enabled                = false
+        vpn_generation                 = "Generation1"
+        vpn_private_ip_address_enabled = false
+        vpn_type                       = "RouteBased"
         ip_configurations = {
           active_active_1 = {
             # name = "vnetGatewayConfigactive_active_1"  # For backwards compatibility with previous naming, uncomment this line
@@ -373,8 +397,8 @@ hub_virtual_networks = {
       private_link_private_dns_zones_regex_filter = {
         enabled = false
       }
-      auto_registration_zone_enabled = "$${primary_private_dns_auto_registration_zone_enabled}"
-      auto_registration_zone_name    = "$${primary_auto_registration_zone_name}"
+      auto_registration_zone_enabled     = "$${primary_private_dns_auto_registration_zone_enabled}"
+      auto_registration_zone_name        = "$${primary_auto_registration_zone_name}"
       virtual_network_link_name_template = "vnet-link-$${primary_virtual_network_name}"
     }
     private_dns_resolver = {
