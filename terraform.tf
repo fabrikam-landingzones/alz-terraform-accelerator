@@ -82,3 +82,9 @@ provider "azurerm" {
     }
   }
 }
+
+provider "azapi" {
+  alias                      = "ai"
+  skip_provider_registration = true
+  subscription_id            = var.subscription_ids["ai"]
+}

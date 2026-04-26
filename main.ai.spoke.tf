@@ -147,15 +147,35 @@ resource "azurerm_virtual_network" "ai_spoke" {
   })
 }
 
-resource "azurerm_subnet" "ai_spoke" {
+resource "azurerm_network_security_group" "ai_spoke" {
   provider = azurerm.ai
 
   for_each = local.ai_spoke.subnets
 
-  name                 = each.value.name
-  resource_group_name  = azurerm_resource_group.ai_spoke.name
-  virtual_network_name = azurerm_virtual_network.ai_spoke.name
-  address_prefixes     = each.value.address_prefixes
+  name                = replace(each.value.name, "snet-", "nsg-")
+  location            = azurerm_resource_group.ai_spoke.location
+  resource_group_name = azurerm_resource_group.ai_spoke.name
+  tags = merge(module.config.outputs.tags, {
+    workload = "ai-foundry"
+  })
+}
+
+resource "azapi_resource" "ai_spoke_subnet" {
+  provider = azapi.ai
+
+  for_each = local.ai_spoke.subnets
+
+  type      = "Microsoft.Network/virtualNetworks/subnets@2024-07-01"
+  name      = each.value.name
+  parent_id = azurerm_virtual_network.ai_spoke.id
+  body = {
+    properties = {
+      addressPrefix = each.value.address_prefixes[0]
+      networkSecurityGroup = {
+        id = azurerm_network_security_group.ai_spoke[each.key].id
+      }
+    }
+  }
 }
 
 resource "azurerm_virtual_network_peering" "hub_to_ai_spoke" {
