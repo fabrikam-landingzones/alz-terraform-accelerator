@@ -138,6 +138,7 @@ jobs:
           terraform \
           -chdir="." \
           apply \
+          -parallelism=1 \
           -input=false \
           -auto-approve \
           tfplan
