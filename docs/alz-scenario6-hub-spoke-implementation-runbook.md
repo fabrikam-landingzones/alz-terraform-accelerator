@@ -6,7 +6,7 @@ Repository: `fabrikam-landingzones/alz-terraform-accelerator`
 
 Branch: `alz-custom`
 
-Current validated checkpoint: `alz-scenario6-subscriptions-placed`
+Current validated checkpoint: `alz-scenario6-ai-spoke-working`
 
 ## 1. Purpose
 
@@ -106,7 +106,7 @@ flowchart TB
   hub["ALZ Hub VNet<br/>vnet-alz-hub-eastus2<br/>Resource group rg-alz-hub-eastus2"]
   dnsresolver["Azure DNS Private Resolver<br/>pdr-alz-hub-dns-eastus2"]
   dnszones["Private DNS Zones<br/>rg-hub-dns-eastus2"]
-  spokes["Future spoke/application networks<br/>Private Link workloads"]
+  spokes["AI Foundry spoke VNet<br/>vnet-ai-foundry-spoke-eastus2"]
   foundry["Future AI Landing Zone / Azure AI Foundry"]
 
   home <--> vpn <--> gateway --> hub
@@ -454,7 +454,7 @@ alz-scenario6-subscriptions-placed
 Current validated tag:
 
 ```text
-alz-scenario6-subscriptions-placed -> 71940df
+alz-scenario6-ai-spoke-working -> e8d538c
 ```
 
 ## 9. Important Stabilization Changes Made

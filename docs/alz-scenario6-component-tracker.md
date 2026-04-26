@@ -31,9 +31,10 @@ Purpose: track the required Scenario 6 platform components, the client-specific 
 | Azure DNS Private Resolver | Deployed in hub | Complete | `pdr-alz-hub-dns-eastus2` visible from hub VNet DNS blade. |
 | S2S VPN gateway | Deployed in hub VNet | Complete | `vgw-alz-hub-vpn-eastus2`. |
 | S2S VPN connection | Connected to home UDR7 | Complete | `conn-alz-home-udr7` status `Connected`; peer `lng-alz-home-udr7`. |
-| AI spoke VNet | Dedicated spoke for upcoming AI Landing Zone | In progress | Terraform file `main.ai.spoke.tf` creates `rg-ai-foundry-spoke-eastus2` and `vnet-ai-foundry-spoke-eastus2`. |
-| Hub-to-spoke peering | Bidirectional peering with gateway transit | In progress | Terraform creates hub-to-spoke peering with `allow_gateway_transit` and spoke-to-hub peering with `use_remote_gateways`. |
-| Spoke Private DNS links | AI spoke linked to existing private DNS zones | In progress | Terraform creates private DNS virtual network links from `rg-hub-dns-eastus2` to `vnet-ai-foundry-spoke-eastus2`. |
+| AI spoke VNet | Dedicated spoke for upcoming AI Landing Zone | Complete | `rg-ai-foundry-spoke-eastus2` and `vnet-ai-foundry-spoke-eastus2` validated in the AI subscription. |
+| AI spoke subnets | Workload, private endpoint, and agent subnets with NSGs | Complete | `snet-ai-foundry-private-endpoints`, `snet-ai-foundry-workloads`, and `snet-ai-foundry-agents` exist and each has an NSG. |
+| Hub-to-spoke peering | Bidirectional peering with gateway transit | Complete | Hub peering is `Connected` with `allowGatewayTransit=True`; spoke peering is `Connected` with `useRemoteGateways=True`. |
+| Spoke Private DNS links | AI spoke linked to existing private DNS zones | Complete | Key zones including `privatelink.openai.azure.com`, `privatelink.services.ai.azure.com`, and `privatelink.blob.core.windows.net` are linked to the spoke. |
 | Change tracking | Enabled | Complete | `change_tracking` was restored in the management configuration. |
 | Defender for SQL | Not in current scope | Deferred | Client requirement: do not focus on Defender for SQL at this stage. |
 | Terraform refresh workaround | Remove `-refresh=false` when provider/API issue is resolved | Deferred | Current workflow still uses `-refresh=false` due Azure API 500 on VPN shared key refresh. |
@@ -50,6 +51,9 @@ Purpose: track the required Scenario 6 platform components, the client-specific 
 | Private endpoint subnet | `snet-ai-foundry-private-endpoints` / `10.0.4.0/24` |
 | Workload subnet | `snet-ai-foundry-workloads` / `10.0.5.0/24` |
 | Agent subnet | `snet-ai-foundry-agents` / `10.0.6.0/24` |
+| Private endpoint subnet NSG | `nsg-ai-foundry-private-endpoints` |
+| Workload subnet NSG | `nsg-ai-foundry-workloads` |
+| Agent subnet NSG | `nsg-ai-foundry-agents` |
 | Hub VNet | `vnet-alz-hub-eastus2` / `10.0.0.0/22` |
 | Home/on-premises ranges | `192.168.4.0/24`, `192.168.1.0/24` |
 
@@ -80,6 +84,46 @@ az role assignment create `
 Expected result: a JSON role assignment showing `roleDefinitionId` for Contributor and `principalId` `ccf2c5f7-2646-46be-897a-771dd053c82c`.
 
 Do not continue to the Terraform pipeline until these role assignments exist, otherwise the plan/apply identities cannot read or create resources in the AI subscription.
+
+The Terraform backend storage account must also be reachable from GitHub-hosted runners. During this implementation the backend state storage account had RBAC configured correctly but `publicNetworkAccess` was disabled, which caused `terraform init` to fail with `403 listing blobs`.
+
+Run from an Azure CLI authenticated PowerShell session with permission to update the backend storage account:
+
+```powershell
+az storage account update `
+  --subscription 1e21d1d0-beb6-4e0e-bb8b-488fd7d39f76 `
+  --resource-group rg-fabalz-fabmgmt-state-eastus2-001 `
+  --name stofabfabeas001vjiu `
+  --public-network-access Enabled `
+  --default-action Allow
+```
+
+Expected result: `publicNetworkAccess` is `Enabled`. `allowSharedKeyAccess` should remain `false`; Terraform continues to authenticate to the backend with Azure AD/RBAC.
+
+## Implementation Notes From AI Spoke Deployment
+
+The first apply attempt failed because ALZ policy requires every subnet to have a Network Security Group at creation time.
+
+Resolution:
+
+```text
+Create an NSG per subnet.
+Create subnets with azapi_resource so networkSecurityGroup.id is included in the initial subnet PUT request.
+```
+
+The second apply attempt hit an Azure Network API concurrency conflict:
+
+```text
+AnotherOperationInProgress
+```
+
+Resolution:
+
+```text
+Add -parallelism=1 to terraform apply in .github/workflows/cd.yaml.
+```
+
+This serializes Azure network updates during apply and avoids parallel subnet operations against the same VNet.
 
 ## Validation Commands After Pipeline Success
 
