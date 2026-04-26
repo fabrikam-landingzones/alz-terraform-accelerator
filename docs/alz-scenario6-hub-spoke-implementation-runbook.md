@@ -6,7 +6,7 @@ Repository: `fabrikam-landingzones/alz-terraform-accelerator`
 
 Branch: `alz-custom`
 
-Current validated checkpoint: `alz-vpn-connected-working`
+Current validated checkpoint: `alz-scenario6-subscriptions-placed`
 
 ## 1. Purpose
 
@@ -25,6 +25,61 @@ The intended design is:
 The next planned phase is to deploy an AI Landing Zone for Azure AI Foundry using Terraform, based on the official Azure Verified Module pattern:
 
 `https://github.com/Azure/terraform-azurerm-avm-ptn-aiml-landing-zone`
+
+## Operator Guidance for Beginner Walkthroughs
+
+This runbook is intended to be used while guiding a client who may not have prior experience with Terraform, Git, or GitHub. Do not ask the client to run a command until the current working directory, expected result, and next decision point are clear.
+
+Use this format when presenting each command live:
+
+```text
+Where to run:
+<local PowerShell path, GitHub UI page, or Azure Portal page>
+
+Command or action:
+<exact command or exact UI action>
+
+What it does:
+<plain-language explanation>
+
+Expected result:
+<success message, visible resource, GitHub run status, or Terraform output>
+
+Before moving on:
+<condition that must be true before continuing>
+```
+
+Important rules for the client session:
+
+- Run PowerShell commands from the directory shown before the command.
+- Do not run `terraform apply` locally while a GitHub Actions Terraform run is active.
+- Do not commit secrets such as VPN pre-shared keys into Git.
+- Treat `terraform plan` as the review step and `terraform apply` as the change step.
+- If Terraform reports a state lock, stop and confirm no other Terraform process or GitHub Actions run is active before unlocking.
+- If Azure RBAC is changed, allow a few minutes for permission propagation before rerunning the pipeline.
+
+Primary local working directories:
+
+```text
+ALZ accelerator source/tooling:
+C:\Users\renatocamara\projects\landingzone\alz\alz-terraform-accelerator
+
+Terraform deployment repository:
+C:\Users\renatocamara\projects\landingzone\alz\alz-terraform-accelerator-deploy
+```
+
+Critical execution sequence:
+
+| Step | Where | Action | Expected result | Continue only when |
+| --- | --- | --- | --- | --- |
+| 1 | Local PowerShell | Install/validate tools with `git --version`, `az version`, `terraform version`, `gh --version`, `pwsh --version` | Each tool returns a version | No command is missing |
+| 2 | Azure / GitHub | Confirm tenant, subscription, and GitHub organization access | User can create Azure RBAC assignments and GitHub repos/environments | Required permissions are confirmed |
+| 3 | ALZ accelerator source directory | Run `Deploy-Accelerator` | Terraform deployment assets are generated under `output` | Generated files exist |
+| 4 | Deployment repository directory | Initialize Git, commit, and push to `alz-custom` | GitHub repository contains the generated Terraform code | Branch exists in GitHub |
+| 5 | GitHub repository settings | Configure environments, variables, and secrets | `fabalz-fabmgmt-plan`, `fabalz-fabmgmt-apply`, variables, and `VPN_SHARED_KEY` exist | Plan/apply identities and backend values are correct |
+| 6 | GitHub Actions | Run workflow on `alz-custom` | Plan and apply jobs run | Apply succeeds or the error is understood |
+| 7 | Local PowerShell / Azure CLI | Validate Azure resources and management group placement | Resources and subscriptions are visible in expected locations | Terraform plan returns `No changes` |
+| 8 | Deployment repository directory | Create a Git checkpoint tag | Tag is pushed to GitHub | Tag appears in GitHub |
 
 ## 2. Official References
 
@@ -742,6 +797,59 @@ BACKEND_AZURE_STORAGE_ACCOUNT_NAME
 BACKEND_AZURE_STORAGE_ACCOUNT_CONTAINER_NAME
 ```
 
+Where to configure through the GitHub UI:
+
+```text
+Repository -> Settings -> Secrets and variables -> Actions -> Variables
+Repository -> Settings -> Environments -> fabalz-fabmgmt-plan -> Environment variables
+Repository -> Settings -> Environments -> fabalz-fabmgmt-apply -> Environment variables
+```
+
+In this implementation, `AZURE_CLIENT_ID` was environment-specific:
+
+```text
+fabalz-fabmgmt-plan  AZURE_CLIENT_ID = 9370d9fb-9ac0-4ed7-87ff-ff285cd30a10
+fabalz-fabmgmt-apply AZURE_CLIENT_ID = f3ef7b38-0ac4-477c-be2f-b1e339be72b6
+```
+
+The backend variables were repository-level variables:
+
+```text
+AZURE_SUBSCRIPTION_ID
+AZURE_TENANT_ID
+BACKEND_AZURE_RESOURCE_GROUP_NAME
+BACKEND_AZURE_STORAGE_ACCOUNT_NAME
+BACKEND_AZURE_STORAGE_ACCOUNT_CONTAINER_NAME
+```
+
+Alternative using GitHub CLI from any local PowerShell directory after `gh auth login`:
+
+```powershell
+gh variable set AZURE_SUBSCRIPTION_ID --repo fabrikam-landingzones/alz-terraform-accelerator --body "1e21d1d0-beb6-4e0e-bb8b-488fd7d39f76"
+gh variable set AZURE_TENANT_ID --repo fabrikam-landingzones/alz-terraform-accelerator --body "c1dbe840-36b0-4f51-bd14-fca27081efd0"
+gh variable set BACKEND_AZURE_RESOURCE_GROUP_NAME --repo fabrikam-landingzones/alz-terraform-accelerator --body "rg-fabalz-fabmgmt-state-eastus2-001"
+gh variable set BACKEND_AZURE_STORAGE_ACCOUNT_NAME --repo fabrikam-landingzones/alz-terraform-accelerator --body "stofabfabeas001vjiu"
+gh variable set BACKEND_AZURE_STORAGE_ACCOUNT_CONTAINER_NAME --repo fabrikam-landingzones/alz-terraform-accelerator --body "fabmgmt-tfstate"
+
+gh variable set AZURE_CLIENT_ID --repo fabrikam-landingzones/alz-terraform-accelerator --env fabalz-fabmgmt-plan --body "9370d9fb-9ac0-4ed7-87ff-ff285cd30a10"
+gh variable set AZURE_CLIENT_ID --repo fabrikam-landingzones/alz-terraform-accelerator --env fabalz-fabmgmt-apply --body "f3ef7b38-0ac4-477c-be2f-b1e339be72b6"
+```
+
+Expected result:
+
+```text
+Each command exits without error.
+The variables appear in GitHub under repository or environment variables.
+```
+
+Validate variables:
+
+```powershell
+gh variable list --repo fabrikam-landingzones/alz-terraform-accelerator
+gh api repos/fabrikam-landingzones/alz-terraform-accelerator/environments/fabalz-fabmgmt-plan/variables --paginate
+gh api repos/fabrikam-landingzones/alz-terraform-accelerator/environments/fabalz-fabmgmt-apply/variables --paginate
+```
+
 Values used by the current implementation must match the bootstrap output. The backend values observed in this implementation were:
 
 ```text
@@ -765,6 +873,14 @@ gh secret set VPN_SHARED_KEY --repo fabrikam-landingzones/alz-terraform-accelera
 ```
 
 The value used in this lab was supplied interactively and must not be committed into Git.
+
+Expected result:
+
+```text
+GitHub CLI prompts for the secret value.
+After submission, `gh secret list --repo fabrikam-landingzones/alz-terraform-accelerator` shows VPN_SHARED_KEY.
+The secret value itself is never displayed again.
+```
 
 ## 17. Local Repository Workflow
 
@@ -913,6 +1029,12 @@ git push origin alz-private-dns-resolver-working
 
 git tag alz-vpn-connected-working
 git push origin alz-vpn-connected-working
+
+git tag alz-scenario6-platform-working
+git push origin alz-scenario6-platform-working
+
+git tag alz-scenario6-subscriptions-placed
+git push origin alz-scenario6-subscriptions-placed
 ```
 
 Current important commit trail:
