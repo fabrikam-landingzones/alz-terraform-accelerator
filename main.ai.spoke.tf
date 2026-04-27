@@ -4,21 +4,7 @@ locals {
     resource_group_name = "rg-ai-foundry-spoke-eastus2"
     virtual_network = {
       name          = "vnet-ai-foundry-spoke-eastus2"
-      address_space = ["10.0.4.0/22"]
-    }
-    subnets = {
-      private_endpoints = {
-        name             = "snet-ai-foundry-private-endpoints"
-        address_prefixes = ["10.0.4.0/24"]
-      }
-      workloads = {
-        name             = "snet-ai-foundry-workloads"
-        address_prefixes = ["10.0.5.0/24"]
-      }
-      agents = {
-        name             = "snet-ai-foundry-agents"
-        address_prefixes = ["10.0.6.0/24"]
-      }
+      address_space = ["10.10.0.0/16"]
     }
     hub = {
       resource_group_name  = "rg-alz-hub-eastus2"
@@ -145,37 +131,6 @@ resource "azurerm_virtual_network" "ai_spoke" {
   tags = merge(module.config.outputs.tags, {
     workload = "ai-foundry"
   })
-}
-
-resource "azurerm_network_security_group" "ai_spoke" {
-  provider = azurerm.ai
-
-  for_each = local.ai_spoke.subnets
-
-  name                = replace(each.value.name, "snet-", "nsg-")
-  location            = azurerm_resource_group.ai_spoke.location
-  resource_group_name = azurerm_resource_group.ai_spoke.name
-  tags = merge(module.config.outputs.tags, {
-    workload = "ai-foundry"
-  })
-}
-
-resource "azapi_resource" "ai_spoke_subnet" {
-  provider = azapi.ai
-
-  for_each = local.ai_spoke.subnets
-
-  type      = "Microsoft.Network/virtualNetworks/subnets@2024-07-01"
-  name      = each.value.name
-  parent_id = azurerm_virtual_network.ai_spoke.id
-  body = {
-    properties = {
-      addressPrefix = each.value.address_prefixes[0]
-      networkSecurityGroup = {
-        id = azurerm_network_security_group.ai_spoke[each.key].id
-      }
-    }
-  }
 }
 
 resource "azurerm_virtual_network_peering" "hub_to_ai_spoke" {

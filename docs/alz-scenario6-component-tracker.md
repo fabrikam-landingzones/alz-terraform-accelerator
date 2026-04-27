@@ -31,14 +31,14 @@ Purpose: track the required Scenario 6 platform components, the client-specific 
 | Azure DNS Private Resolver | Deployed in hub | Complete | `pdr-alz-hub-dns-eastus2` visible from hub VNet DNS blade. |
 | S2S VPN gateway | Deployed in hub VNet | Complete | `vgw-alz-hub-vpn-eastus2`. |
 | S2S VPN connection | Connected to home UDR7 | Complete | `conn-alz-home-udr7` status `Connected`; peer `lng-alz-home-udr7`. |
-| AI spoke VNet | Dedicated spoke for upcoming AI Landing Zone | Complete | `rg-ai-foundry-spoke-eastus2` and `vnet-ai-foundry-spoke-eastus2` validated in the AI subscription. |
-| AI spoke subnets | Workload, private endpoint, and agent subnets with NSGs | Complete | `snet-ai-foundry-private-endpoints`, `snet-ai-foundry-workloads`, and `snet-ai-foundry-agents` exist and each has an NSG. |
+| AI spoke VNet | Dedicated BYO VNet for upcoming AI Landing Zone | Complete | `rg-ai-foundry-spoke-eastus2` and `vnet-ai-foundry-spoke-eastus2` validated in the AI subscription. Address space expanded to `10.10.0.0/16` on 2026-04-27. |
+| AI spoke subnets | Created by the AI Landing Zone module, not by ALZ | Deferred to AI Landing Zone phase | The three provisional ALZ-managed subnets and NSGs were removed on 2026-04-27 so the official AI Landing Zone module can own its required subnets in its own Terraform state. |
 | Hub-to-spoke peering | Bidirectional peering with gateway transit | Complete | Hub peering is `Connected` with `allowGatewayTransit=True`; spoke peering is `Connected` with `useRemoteGateways=True`. |
 | Spoke Private DNS links | AI spoke linked to existing private DNS zones | Complete | Key zones including `privatelink.openai.azure.com`, `privatelink.services.ai.azure.com`, and `privatelink.blob.core.windows.net` are linked to the spoke. |
 | Change tracking | Enabled | Complete | `change_tracking` was restored in the management configuration. |
 | Defender for SQL | Not in current scope | Deferred | Client requirement: do not focus on Defender for SQL at this stage. |
 | Terraform refresh workaround | Remove `-refresh=false` when provider/API issue is resolved | Deferred | Current workflow still uses `-refresh=false` due Azure API 500 on VPN shared key refresh. |
-| Old manually created environment | Leave untouched until new implementation is validated | Deferred | Existing old resources such as `rg-hub-eastus2` are intentionally not deleted yet. |
+| Old manually created environment cleanup | Delete only the explicitly approved old resource groups | Complete | The 8 approved old resource groups were deleted and verified as no longer existing on 2026-04-26. Current ALZ resource groups were preserved. |
 
 ## AI Spoke VNet Design
 
@@ -216,3 +216,149 @@ git push origin alz-scenario6-ai-spoke-working
 ```
 
 Expected result: GitHub receives the new tag and the deployment has a rollback/reference point before starting the AI Landing Zone implementation.
+
+## Final ALZ Sanity Check - 2026-04-26
+
+This check confirms that the current ALZ Scenario 6 implementation, with the approved client exclusions, is ready for the next phase: AI Landing Zone deployment.
+
+### Terraform Validation
+
+Run from:
+
+```text
+C:\Users\renatocamara\projects\landingzone\alz\alz-terraform-accelerator-deploy
+```
+
+Commands:
+
+```powershell
+terraform fmt -check -recursive
+terraform validate
+$env:TF_VAR_vpn_shared_key = "ReplaceWithAStrongSharedKey123!"
+terraform plan -input=false -refresh=false -detailed-exitcode
+```
+
+Validated result:
+
+```text
+terraform fmt -check -recursive completed successfully.
+terraform validate returned: Success! The configuration is valid.
+terraform plan returned: No changes. Your infrastructure matches the configuration.
+```
+
+Note: `-refresh=false` remains intentional because of the known Azure API/provider refresh issue on the VPN connection shared key.
+
+### Azure Resource Validation
+
+Validated resource groups that must remain:
+
+| Subscription | Resource group | Result |
+| --- | --- | --- |
+| Connectivity | `rg-alz-hub-eastus2` | Exists |
+| Connectivity | `rg-hub-dns-eastus2` | Exists |
+| AI | `rg-ai-foundry-spoke-eastus2` | Exists |
+| Management | `rg-management-eastus2` | Exists |
+| Management | `rg-fabalz-fabmgmt-state-eastus2-001` | Exists |
+| Management | `rg-fabalz-fabmgmt-identity-eastus2-001` | Exists |
+
+Validated old resource groups deleted after explicit approval:
+
+| Subscription | Resource group | Result |
+| --- | --- | --- |
+| AI | `rg-ai-foundry-dev-eastus2` | Does not exist |
+| AI | `rg-ai-spoke-eastus2` | Does not exist |
+| Connectivity | `rg-hub-eastus2` | Does not exist |
+| Connectivity | `rg-platform-keyvault-eastus2` | Does not exist |
+| CORP | `rg-corp-privatelink-dev-eastus2` | Does not exist |
+| CORP | `rg-spoke-dev-eastus2` | Does not exist |
+| Sandbox | `rg-alz01-lab-identity-eastus2-001` | Does not exist |
+| Sandbox | `rg-alz01-lab-state-eastus2-001` | Does not exist |
+
+### Final Component Results
+
+| Component | Expected state | Result |
+| --- | --- | --- |
+| Management group hierarchy | ALZ hierarchy under `Fabrikam` | Complete |
+| Subscription placement | Platform and workload subscriptions under the intended ALZ management groups | Complete |
+| Hub VNet | `vnet-alz-hub-eastus2`, address space `10.0.0.0/22` | Complete |
+| Hub subnets | `dns-resolver`, `GatewaySubnet` | Complete |
+| Private DNS zones | 90 private DNS zones in `rg-hub-dns-eastus2` | Complete |
+| DNS Private Resolver | `pdr-alz-hub-dns-eastus2` in `rg-alz-hub-eastus2` | Complete |
+| S2S VPN | `conn-alz-home-udr7` connected by IPsec | Complete |
+| AI spoke VNet | `vnet-ai-foundry-spoke-eastus2`, address space `10.10.0.0/16` | Complete |
+| AI spoke subnets | No ALZ-managed subnets; subnets will be created by the AI Landing Zone deployment | Deferred to AI Landing Zone phase |
+| Hub-to-spoke peering | Connected, with gateway transit enabled from the hub | Complete |
+| Spoke-to-hub peering | Connected, with remote gateway usage enabled from the spoke | Complete |
+| AI spoke Private DNS links | Key AI and Private Link zones linked to the AI spoke | Complete |
+| Azure Firewall | Not deployed | Excluded by requirement |
+| DDoS Protection | Not deployed | Excluded by requirement |
+| Azure Bastion | Not deployed | Excluded by requirement |
+| Defender for SQL | Not part of this phase | Deferred |
+
+### Conclusion
+
+There are no remaining required ALZ Scenario 6 platform tasks before starting the AI Landing Zone phase. The next implementation should treat the AI spoke VNet as an existing/BYO network and deploy Azure AI Foundry resources and its required subnets into that prepared spoke model.
+
+### 2026-04-27 AI Landing Zone Network Preparation Update
+
+The AI spoke was expanded from a small `/22` to a larger non-overlapping `/16`:
+
+```text
+Old: 10.0.4.0/22
+New: 10.10.0.0/16
+```
+
+Rationale:
+
+```text
+10.0.0.0/16 could not be used because it would overlap the ALZ hub address space 10.0.0.0/22.
+192.168.0.0/16 was rejected because it overlaps the home network ranges used across the S2S VPN.
+10.10.0.0/16 gives enough room for the AI Landing Zone and future expansion without overlapping the hub or home network.
+```
+
+The provisional ALZ-created subnets were removed:
+
+```text
+snet-ai-foundry-private-endpoints
+snet-ai-foundry-workloads
+snet-ai-foundry-agents
+```
+
+Their NSGs were also removed:
+
+```text
+nsg-ai-foundry-private-endpoints
+nsg-ai-foundry-workloads
+nsg-ai-foundry-agents
+```
+
+Why:
+
+```text
+The official Azure AI Landing Zone Terraform module creates its own required subnets inside the BYO VNet. Pre-creating those subnets in the ALZ Terraform state would create ownership conflicts between the ALZ state and the AI Landing Zone state.
+```
+
+Final validation:
+
+```powershell
+$env:TF_VAR_vpn_shared_key = "ReplaceWithAStrongSharedKey123!"
+terraform plan -input=false -refresh=false -detailed-exitcode
+```
+
+Validated result:
+
+```text
+No changes. Your infrastructure matches the configuration.
+```
+
+Planned AI Landing Zone subnet ownership:
+
+| Subnet purpose | Created by | Initial status |
+| --- | --- | --- |
+| Private Endpoints subnet | AI Landing Zone module | Required |
+| AI Foundry Agent subnet / capability host subnet | AI Landing Zone module | Required if AI Agent Service is enabled |
+| Build agent subnet | AI Landing Zone module | Recommended / module default |
+| Container App Environment subnet | AI Landing Zone module | Recommended / module default |
+| API Management subnet | AI Landing Zone module | Optional unless APIM is deployed |
+| Application Gateway subnet | AI Landing Zone module | Optional unless Application Gateway is deployed |
+| Jump box subnet | AI Landing Zone module | Optional; not planned for initial private VPN access path |

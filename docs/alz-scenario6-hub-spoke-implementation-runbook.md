@@ -1875,19 +1875,36 @@ examples/standalone
 examples/standalone-byo-vnet
 ```
 
-Key decision:
+Networking decision already made during ALZ preparation:
 
 ```text
-Use a new spoke VNet for AI Landing Zone, or use BYO VNet and connect it to the ALZ hub.
+Use the existing Terraform-managed AI spoke VNet as the BYO network for the AI Landing Zone.
 ```
 
-Likely preferred approach for this client:
+Selected approach for this client:
 
 ```text
-Deploy AI Landing Zone as a spoke/application landing zone.
-Peer the AI spoke VNet with vnet-alz-hub-eastus2.
-Use Private Endpoints and Private DNS integration.
+Deploy AI Landing Zone as an application landing zone into the prepared AI spoke.
+Use vnet-ai-foundry-spoke-eastus2 as the target spoke VNet.
+Use the existing hub-to-spoke peerings.
+Use the existing Private DNS zone links from rg-hub-dns-eastus2.
 Route home/on-premises access through the existing S2S VPN.
+```
+
+Updated network foundation as of 2026-04-27:
+
+```text
+AI spoke VNet: vnet-ai-foundry-spoke-eastus2
+AI spoke resource group: rg-ai-foundry-spoke-eastus2
+AI subscription: e4092919-7fd6-46bb-94fe-955fd8cc7ca1
+Address space: 10.10.0.0/16
+```
+
+Important:
+
+```text
+Do not pre-create the AI Landing Zone module subnets in the ALZ Terraform state.
+The official AI Landing Zone module creates subnets inside the BYO VNet and must own those subnet resources in its own Terraform state.
 ```
 
 Minimum preflight checks:
@@ -1912,10 +1929,561 @@ Confirm AI spoke address space does not overlap with:
 192.168.1.0/24
 ```
 
+Validated decision:
+
+```text
+Use 10.10.0.0/16 for the AI spoke.
+Do not use 10.0.0.0/16 because it overlaps the ALZ hub.
+Do not use 192.168.0.0/16 because the home network already uses 192.168.x.x ranges across the S2S VPN.
+```
+
 DNS checks:
 
 ```text
 Confirm required Private DNS zones exist or will be created/linked.
 Confirm the AI spoke VNet can resolve through Azure Private DNS and DNS Private Resolver.
 Confirm home clients can resolve required private names if client testing requires access from home network.
+```
+
+## 33. Final ALZ Sanity Check Before AI Landing Zone
+
+This check was performed on 2026-04-26 after the AI spoke VNet deployment and after cleanup of the old resource groups explicitly approved for deletion.
+
+Run all commands from:
+
+```text
+C:\Users\renatocamara\projects\landingzone\alz\alz-terraform-accelerator-deploy
+```
+
+### 33.1 Validate Terraform Formatting and Syntax
+
+Command:
+
+```powershell
+terraform fmt -check -recursive
+```
+
+What it does:
+
+```text
+Checks whether Terraform files are already formatted correctly.
+```
+
+Validated result:
+
+```text
+Command completed successfully.
+```
+
+Command:
+
+```powershell
+terraform validate
+```
+
+What it does:
+
+```text
+Validates the Terraform configuration syntax, provider references, variables, and module wiring.
+```
+
+Validated result:
+
+```text
+Success! The configuration is valid.
+```
+
+### 33.2 Validate Terraform State Alignment
+
+Command:
+
+```powershell
+$env:TF_VAR_vpn_shared_key = "ReplaceWithAStrongSharedKey123!"
+terraform plan -input=false -refresh=false -detailed-exitcode
+```
+
+What it does:
+
+```text
+Compares the current Terraform configuration with the Terraform state without refreshing live Azure resources.
+The -refresh=false flag is intentional because the Azure API/provider path for VPN connection shared key refresh previously returned errors.
+```
+
+Validated result:
+
+```text
+No changes. Your infrastructure matches the configuration.
+```
+
+Warnings observed:
+
+```text
+Provider/module deprecation warnings were shown for azapi randomization_factor and AzureRM enable_bgp.
+These are warnings from upstream modules/providers and do not block the current deployment.
+```
+
+Do not move forward if:
+
+```text
+Terraform shows resources to add, change, or destroy.
+Terraform validate fails.
+Terraform cannot acquire or release the state lock.
+```
+
+### 33.3 Validate Subscription Placement
+
+Command:
+
+```powershell
+$tree = az account management-group show --name Fabrikam --expand --recurse -o json | ConvertFrom-Json
+function Walk-Mg($node, $parent) {
+  $rows = @()
+  $rows += [pscustomobject]@{Name=$node.name; DisplayName=$node.displayName; Type=$node.type; Parent=$parent}
+  if ($node.children) {
+    foreach ($child in $node.children) { $rows += Walk-Mg $child $node.name }
+  }
+  return $rows
+}
+Walk-Mg $tree '' | Where-Object { $_.Type -eq '/subscriptions' } | Format-Table -AutoSize
+```
+
+Validated result:
+
+| Subscription | Subscription ID | Parent management group |
+| --- | --- | --- |
+| Connectivity | `2a43354d-ac7c-44a4-9a65-3cc7868cdbdb` | `connectivity` |
+| Management | `1e21d1d0-beb6-4e0e-bb8b-488fd7d39f76` | `management` |
+| Identity | `ab823d38-57e4-4b2a-947a-e9b299c2f3e5` | `identity` |
+| Security | `b5b15a08-8831-4804-b9eb-2e766576dc14` | `security` |
+| HPC | `9adc397a-4c08-447e-8a97-15faef9e9f86` | `hpc` |
+| Online | `475ee8b6-bb28-4115-b780-a27db1aaf6fe` | `online` |
+| Migrate | `c202d22b-0236-481b-9c69-0ad5b2d54451` | `migrate` |
+| CORP | `f119d7a1-1278-4480-bd2c-2f6ff77ff01f` | `corp` |
+| AI | `e4092919-7fd6-46bb-94fe-955fd8cc7ca1` | `ai` |
+| Sandbox | `28c3c8ba-cc60-49a8-af56-aeaeeab33546` | `sandbox` |
+
+### 33.4 Validate Current ALZ Resource Groups
+
+Command:
+
+```powershell
+$preservedTargets = @(
+  @{Subscription='2a43354d-ac7c-44a4-9a65-3cc7868cdbdb'; SubscriptionName='Connectivity'; ResourceGroup='rg-alz-hub-eastus2'},
+  @{Subscription='2a43354d-ac7c-44a4-9a65-3cc7868cdbdb'; SubscriptionName='Connectivity'; ResourceGroup='rg-hub-dns-eastus2'},
+  @{Subscription='e4092919-7fd6-46bb-94fe-955fd8cc7ca1'; SubscriptionName='AI'; ResourceGroup='rg-ai-foundry-spoke-eastus2'},
+  @{Subscription='1e21d1d0-beb6-4e0e-bb8b-488fd7d39f76'; SubscriptionName='Management'; ResourceGroup='rg-management-eastus2'},
+  @{Subscription='1e21d1d0-beb6-4e0e-bb8b-488fd7d39f76'; SubscriptionName='Management'; ResourceGroup='rg-fabalz-fabmgmt-state-eastus2-001'},
+  @{Subscription='1e21d1d0-beb6-4e0e-bb8b-488fd7d39f76'; SubscriptionName='Management'; ResourceGroup='rg-fabalz-fabmgmt-identity-eastus2-001'}
+)
+
+$preservedTargets | ForEach-Object {
+  [pscustomobject]@{
+    Subscription=$_.SubscriptionName
+    ResourceGroup=$_.ResourceGroup
+    Exists=(az group exists --subscription $_.Subscription --name $_.ResourceGroup)
+  }
+} | Format-Table -AutoSize
+```
+
+Validated result:
+
+```text
+All six current ALZ resource groups returned Exists = true.
+```
+
+### 33.5 Validate Old Resource Groups Were Removed
+
+Command:
+
+```powershell
+$deletedTargets = @(
+  @{Subscription='e4092919-7fd6-46bb-94fe-955fd8cc7ca1'; SubscriptionName='AI'; ResourceGroup='rg-ai-foundry-dev-eastus2'},
+  @{Subscription='e4092919-7fd6-46bb-94fe-955fd8cc7ca1'; SubscriptionName='AI'; ResourceGroup='rg-ai-spoke-eastus2'},
+  @{Subscription='2a43354d-ac7c-44a4-9a65-3cc7868cdbdb'; SubscriptionName='Connectivity'; ResourceGroup='rg-hub-eastus2'},
+  @{Subscription='2a43354d-ac7c-44a4-9a65-3cc7868cdbdb'; SubscriptionName='Connectivity'; ResourceGroup='rg-platform-keyvault-eastus2'},
+  @{Subscription='f119d7a1-1278-4480-bd2c-2f6ff77ff01f'; SubscriptionName='CORP'; ResourceGroup='rg-corp-privatelink-dev-eastus2'},
+  @{Subscription='f119d7a1-1278-4480-bd2c-2f6ff77ff01f'; SubscriptionName='CORP'; ResourceGroup='rg-spoke-dev-eastus2'},
+  @{Subscription='28c3c8ba-cc60-49a8-af56-aeaeeab33546'; SubscriptionName='Sandbox'; ResourceGroup='rg-alz01-lab-identity-eastus2-001'},
+  @{Subscription='28c3c8ba-cc60-49a8-af56-aeaeeab33546'; SubscriptionName='Sandbox'; ResourceGroup='rg-alz01-lab-state-eastus2-001'}
+)
+
+$deletedTargets | ForEach-Object {
+  [pscustomobject]@{
+    Subscription=$_.SubscriptionName
+    ResourceGroup=$_.ResourceGroup
+    Exists=(az group exists --subscription $_.Subscription --name $_.ResourceGroup)
+  }
+} | Format-Table -AutoSize
+```
+
+Validated result:
+
+```text
+All eight approved old resource groups returned Exists = false.
+```
+
+### 33.6 Validate Hub, DNS Resolver, and VPN
+
+Command:
+
+```powershell
+az network vnet show `
+  --subscription 2a43354d-ac7c-44a4-9a65-3cc7868cdbdb `
+  --resource-group rg-alz-hub-eastus2 `
+  --name vnet-alz-hub-eastus2 `
+  --query "{name:name,addressSpace:addressSpace.addressPrefixes,subnets:subnets[].name}" `
+  -o json
+```
+
+Validated result:
+
+```text
+VNet: vnet-alz-hub-eastus2
+Address space: 10.0.0.0/22
+Subnets: dns-resolver, GatewaySubnet
+```
+
+Command:
+
+```powershell
+az resource list `
+  --subscription 2a43354d-ac7c-44a4-9a65-3cc7868cdbdb `
+  --query "[?contains(name, 'pdr-alz') || contains(type, 'dnsResolvers') || contains(type, 'DnsResolvers')].{name:name,type:type,resourceGroup:resourceGroup,location:location}" `
+  -o table
+```
+
+Validated result:
+
+```text
+pdr-alz-hub-dns-eastus2 exists in rg-alz-hub-eastus2.
+```
+
+Command:
+
+```powershell
+az network vpn-connection show `
+  --subscription 2a43354d-ac7c-44a4-9a65-3cc7868cdbdb `
+  --resource-group rg-alz-hub-eastus2 `
+  --name conn-alz-home-udr7 `
+  --query "{name:name,connectionStatus:connectionStatus,connectionType:connectionType,egressBytesTransferred:egressBytesTransferred,ingressBytesTransferred:ingressBytesTransferred}" `
+  -o json
+```
+
+Validated result:
+
+```text
+Connection: conn-alz-home-udr7
+Type: IPsec
+Status: Connected
+```
+
+### 33.7 Validate AI Spoke and Peering
+
+Command:
+
+```powershell
+az network vnet show `
+  --subscription e4092919-7fd6-46bb-94fe-955fd8cc7ca1 `
+  --resource-group rg-ai-foundry-spoke-eastus2 `
+  --name vnet-ai-foundry-spoke-eastus2 `
+  --query "{name:name,addressSpace:addressSpace.addressPrefixes,subnets:subnets[].{name:name,prefix:addressPrefix,nsg:networkSecurityGroup.id}}" `
+  -o json
+```
+
+Validated result:
+
+```text
+VNet: vnet-ai-foundry-spoke-eastus2
+Address space: 10.0.4.0/22
+Subnets:
+- snet-ai-foundry-private-endpoints / 10.0.4.0/24 / NSG attached
+- snet-ai-foundry-workloads / 10.0.5.0/24 / NSG attached
+- snet-ai-foundry-agents / 10.0.6.0/24 / NSG attached
+```
+
+Command:
+
+```powershell
+az network vnet peering list `
+  --subscription 2a43354d-ac7c-44a4-9a65-3cc7868cdbdb `
+  --resource-group rg-alz-hub-eastus2 `
+  --vnet-name vnet-alz-hub-eastus2 `
+  --query "[].{name:name,state:peeringState,allowGatewayTransit:allowGatewayTransit,useRemoteGateways:useRemoteGateways,remote:remoteVirtualNetwork.id}" `
+  -o table
+
+az network vnet peering list `
+  --subscription e4092919-7fd6-46bb-94fe-955fd8cc7ca1 `
+  --resource-group rg-ai-foundry-spoke-eastus2 `
+  --vnet-name vnet-ai-foundry-spoke-eastus2 `
+  --query "[].{name:name,state:peeringState,allowGatewayTransit:allowGatewayTransit,useRemoteGateways:useRemoteGateways,remote:remoteVirtualNetwork.id}" `
+  -o table
+```
+
+Validated result:
+
+```text
+Hub peering: Connected, allowGatewayTransit = True.
+Spoke peering: Connected, useRemoteGateways = True.
+```
+
+### 33.8 Validate Private DNS
+
+Command:
+
+```powershell
+az resource list `
+  --subscription 2a43354d-ac7c-44a4-9a65-3cc7868cdbdb `
+  --resource-group rg-hub-dns-eastus2 `
+  --resource-type Microsoft.Network/privateDnsZones `
+  --query "[].name" `
+  -o tsv | Measure-Object
+```
+
+Validated result:
+
+```text
+90 Private DNS zones exist in rg-hub-dns-eastus2.
+```
+
+Command:
+
+```powershell
+$zones = @(
+  'privatelink.openai.azure.com',
+  'privatelink.services.ai.azure.com',
+  'privatelink.blob.core.windows.net',
+  'eastus2.azure.local'
+)
+
+foreach ($zone in $zones) {
+  Write-Output "ZONE $zone"
+  az network private-dns link vnet list `
+    --subscription 2a43354d-ac7c-44a4-9a65-3cc7868cdbdb `
+    --resource-group rg-hub-dns-eastus2 `
+    --zone-name $zone `
+    --query "[?contains(virtualNetwork.id, 'vnet-ai-foundry-spoke-eastus2')].{name:name,registrationEnabled:registrationEnabled,state:virtualNetworkLinkState}" `
+    -o table
+}
+```
+
+Validated result:
+
+```text
+privatelink.openai.azure.com: link exists, Completed, registration disabled.
+privatelink.services.ai.azure.com: link exists, Completed, registration disabled.
+privatelink.blob.core.windows.net: link exists, Completed, registration disabled.
+eastus2.azure.local: link exists, Completed, registration enabled.
+```
+
+### 33.9 Validate Client Exclusions
+
+Command:
+
+```powershell
+az resource list `
+  --subscription 2a43354d-ac7c-44a4-9a65-3cc7868cdbdb `
+  --resource-group rg-alz-hub-eastus2 `
+  --query "[?contains(type, 'azureFirewalls') || contains(type, 'bastionHosts') || contains(type, 'ddosProtectionPlans')].{name:name,type:type}" `
+  -o table
+
+az resource list `
+  --subscription e4092919-7fd6-46bb-94fe-955fd8cc7ca1 `
+  --resource-group rg-ai-foundry-spoke-eastus2 `
+  --query "[?contains(type, 'azureFirewalls') || contains(type, 'bastionHosts') || contains(type, 'ddosProtectionPlans')].{name:name,type:type}" `
+  -o table
+```
+
+Validated result:
+
+```text
+No Azure Firewall resources found.
+No Azure Bastion resources found.
+No DDoS Protection Plan resources found.
+```
+
+### 33.10 Final ALZ Conclusion
+
+At this point, there is nothing else required to finish the ALZ Scenario 6 platform deployment for the agreed scope.
+
+Completed:
+
+```text
+Management group hierarchy
+Subscription placement
+Management resources
+Hub VNet
+Private DNS zones
+Deploy-Private-DNS-Zones policy restored
+Change tracking restored
+DNS Private Resolver
+S2S VPN gateway and connected S2S VPN
+AI spoke VNet
+AI spoke subnets with NSGs
+Hub/spoke peering with gateway transit
+AI spoke Private DNS links
+Cleanup of explicitly approved old resource groups
+```
+
+Intentionally excluded:
+
+```text
+Azure Firewall
+DDoS Protection
+Azure Bastion
+```
+
+Deferred:
+
+```text
+Defender for SQL
+Removal of the Terraform -refresh=false workaround after the VPN shared key refresh issue is resolved upstream
+```
+
+Next phase:
+
+```text
+Start the AI Landing Zone deployment using the official AVM AI Landing Zone repository.
+Use the already deployed AI spoke VNet as the BYO network target.
+Do not create a second AI spoke unless the client explicitly changes the design.
+```
+
+## 34. AI Landing Zone Network Foundation Update
+
+This section records the network update made before starting the AI Landing Zone deployment.
+
+### 34.1 Why the AI Spoke Was Expanded
+
+The original AI spoke was:
+
+```text
+10.0.4.0/22
+```
+
+That was enough for a small placeholder spoke but too small for a full AI Landing Zone with private endpoints, AI Agent Service/capability host, build agents, optional API Management, optional Application Gateway, and future growth.
+
+The AI spoke was changed to:
+
+```text
+10.10.0.0/16
+```
+
+This range was selected because:
+
+```text
+It is RFC1918/private address space.
+It does not overlap the ALZ hub VNet 10.0.0.0/22.
+It does not overlap the home network ranges 192.168.4.0/24 and 192.168.1.0/24.
+It leaves enough capacity for the AI Landing Zone module and future expansion.
+```
+
+### 34.2 Why the Placeholder Subnets Were Removed
+
+The following ALZ-managed placeholder subnets were removed:
+
+```text
+snet-ai-foundry-private-endpoints
+snet-ai-foundry-workloads
+snet-ai-foundry-agents
+```
+
+The following ALZ-managed placeholder NSGs were also removed:
+
+```text
+nsg-ai-foundry-private-endpoints
+nsg-ai-foundry-workloads
+nsg-ai-foundry-agents
+```
+
+Reason:
+
+```text
+The official AI Landing Zone Terraform module creates and manages its own subnets when using an existing BYO VNet.
+Keeping placeholder subnets in the ALZ state would create conflicts or overlapping address space with the AI Landing Zone state.
+```
+
+### 34.3 Commands Used
+
+File changed:
+
+```text
+C:\Users\renatocamara\projects\landingzone\alz\alz-terraform-accelerator-deploy\main.ai.spoke.tf
+```
+
+Validation:
+
+```powershell
+terraform fmt main.ai.spoke.tf
+terraform validate
+```
+
+Plan:
+
+```powershell
+$env:TF_VAR_vpn_shared_key = "ReplaceWithAStrongSharedKey123!"
+terraform plan -input=false -refresh=false -out ai-spoke-expand.tfplan
+```
+
+Expected plan:
+
+```text
+0 to add, 1 to change, 6 to destroy.
+```
+
+Apply:
+
+```powershell
+terraform apply -input=false -parallelism=1 ai-spoke-expand.tfplan
+```
+
+Final validation:
+
+```powershell
+$env:TF_VAR_vpn_shared_key = "ReplaceWithAStrongSharedKey123!"
+terraform plan -input=false -refresh=false -detailed-exitcode
+```
+
+Validated result:
+
+```text
+No changes. Your infrastructure matches the configuration.
+```
+
+Azure validation:
+
+```powershell
+az network vnet show `
+  --subscription e4092919-7fd6-46bb-94fe-955fd8cc7ca1 `
+  --resource-group rg-ai-foundry-spoke-eastus2 `
+  --name vnet-ai-foundry-spoke-eastus2 `
+  --query "{name:name,addressSpace:addressSpace.addressPrefixes,subnets:subnets[].{name:name,prefix:addressPrefix}}" `
+  -o json
+```
+
+Validated result:
+
+```text
+VNet: vnet-ai-foundry-spoke-eastus2
+Address space: 10.10.0.0/16
+Subnets: none currently managed by ALZ
+```
+
+### 34.4 Subnet Ownership for AI Landing Zone
+
+The official AI Landing Zone module should create and manage the following subnet purposes inside the BYO VNet:
+
+| Subnet purpose | Required for initial deployment? | Notes |
+| --- | --- | --- |
+| Private Endpoints subnet | Yes | Required for private endpoint based access to Foundry, Storage, Key Vault, and related services. |
+| AI Foundry Agent subnet / capability host subnet | Yes if AI Agent Service is enabled | The module uses an AI Foundry subnet with Microsoft.App/environment delegation for capability host/agent service scenarios. |
+| Build agent subnet | Recommended | Useful for private build/deployment agents. |
+| Container App Environment subnet | Recommended | Needed if the deployment uses Container Apps or agent/runtime hosting patterns. |
+| API Management subnet | Optional | Required only if APIM is deployed in the AI Landing Zone. |
+| Application Gateway subnet | Optional | Required only if Application Gateway is deployed. |
+| Jump box subnet | Not planned initially | Not required because access is expected from the local laptop over the S2S VPN. |
+
+Initial decision:
+
+```text
+Do not deploy Azure Bastion or a jump box in the initial AI Landing Zone deployment.
+Use private connectivity over the existing S2S VPN.
 ```
